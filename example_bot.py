@@ -10,7 +10,7 @@ from supply import SupplyDrops
 
 
 class Bot:
-    name = "Borovail E28"
+    name = "Borovail E30"
 
     def __init__(self, hello: mf.Hello):
         self.navigator = Navigator.from_hello(hello)
@@ -56,7 +56,11 @@ class Bot:
             dz = (cz + self.crate_height / 2) - (z + me["stats"]["muzzle_height"])
             act.update(aim=[math.atan2(cy - y, cx - x), math.atan2(dz, math.hypot(cx - x, cy - y))],
                        fire=[True, False])
-        elif supply or choice["reason"] == "none":
+        elif (supply or choice["reason"] == "none"
+              or (obs["t"] <= 60.0 and choice["reason"] in ("pickup", "cube")
+                  and choice["pickup_id"] is None
+                  and (len(me["weapons"]) < 2 or not me["weapons"][1])
+                  and any(direction))):
             # Legs keep the route while the game camera reveals new pickups.
             act["aim"] = [math.remainder(me["aim"][0] + 0.4, math.tau), 0.0]
         mf.draw.point([goal[0], goal[1], z], "#40c0ff", 6)
