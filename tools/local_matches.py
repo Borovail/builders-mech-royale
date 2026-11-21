@@ -76,7 +76,12 @@ def sha256(path):
 
 def bot_manifest(directory):
     # Entry bot and its local imports in this project live at the root.
-    return {p.name: sha256(p) for p in sorted(Path(directory).glob("*.py"))}
+    directory = Path(directory)
+    files = sorted(directory.glob("*.py"))
+    policy = directory / "policy.json"
+    if policy.is_file():
+        files.append(policy)
+    return {p.name: sha256(p) for p in files}
 
 
 def require_engine(directory):
@@ -98,7 +103,7 @@ def load_file(name, path):
 
 def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies, fixed_planning=False,
                 cube_size=False, audit_places=False, legal_spawns=False,
-                house_every_observation=False, movement_geometry=False):
+                house_every_observation=False, movement_geometry=False, entrypoint="example_bot.py"):
     global _arena, _bot_class, _draw, _worker_init_s
     start = time.perf_counter()
     engine, bot_dir = Path(engine), Path(bot_dir)
@@ -145,7 +150,7 @@ def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies, fixed_pla
     # Only suppress the stdio loop here; SquadArena drives that same Bot.act.
     wrapper = load_file("mechfight", bot_dir / "mechfight.py")
     with patch.object(wrapper, "run"):
-        bot = load_file("_benchmark_evaluated_bot", bot_dir / "example_bot.py")
+        bot = load_file("_benchmark_evaluated_bot", bot_dir / entrypoint)
     bot_nav = sys.modules.get("navigation")
     if bot_nav is not None and Path(bot_nav.__file__).resolve() != (bot_dir / "navigation.py").resolve():
         raise RuntimeError("Bot imported navigation from outside --bot-dir")
@@ -253,6 +258,8 @@ def main(argv=None):
     parser.add_argument("--engine", required=True, type=Path)
     parser.add_argument("--kit", required=True, type=Path)
     parser.add_argument("--bot-dir", required=True, type=Path)
+    parser.add_argument("--entrypoint", default="example_bot.py",
+                        help="Root Python module defining Bot, matching the tested image entrypoint")
     parser.add_argument("--seeds", required=True, type=int, help="First seed of a consecutive held-out series")
     parser.add_argument("--count", required=True, type=int)
     parser.add_argument("--workers", type=int, default=min(4, os.cpu_count() or 1))
@@ -276,8 +283,8 @@ def main(argv=None):
     args.engine, args.kit, args.bot_dir = (p.resolve() for p in (args.engine, args.kit, args.bot_dir))
     engine_hashes = require_engine(args.engine)
     source_hashes = bot_manifest(args.bot_dir)
-    if "example_bot.py" not in source_hashes:
-        parser.error("--bot-dir must contain example_bot.py")
+    if not args.entrypoint.endswith(".py") or args.entrypoint not in source_hashes:
+        parser.error("--entrypoint must name a Python file in the root of --bot-dir")
     metadata = {"engine_url": ENGINE_URL, "engine_commit": ENGINE_COMMIT,
                 "engine_sha256": engine_hashes, "engine_changes": [],
                 "adapter_sha256": sha256(Path(__file__)),
@@ -285,6 +292,7 @@ def main(argv=None):
                 "world_sha256": sha256(args.kit / "arena/v2/world.json"),
                 "terrain_sha256": sha256(args.kit / "arena/v2/terrain.i16"),
                 "bot_dir": str(args.bot_dir), "bot_source_sha256": source_hashes,
+                "entrypoint": args.entrypoint,
                 "bot_git": git_info(args.bot_dir), "seeds_start": args.seeds,
                 "count": args.count, "workers": min(args.workers, args.count),
                 "python": sys.version, "platform": sys.platform, "caveats": CAVEATS,
@@ -324,7 +332,7 @@ def main(argv=None):
     results = []
     initargs = tuple(str(p) for p in (args.engine, args.kit, args.bot_dir)) + (
         source_hashes, args.supplies, args.fixed_planning, args.cube_size, args.audit_places,
-        args.legal_spawns, args.house_every_observation, args.movement_geometry)
+        args.legal_spawns, args.house_every_observation, args.movement_geometry, args.entrypoint)
     pool = ProcessPoolExecutor(max_workers=metadata["workers"],
             mp_context=multiprocessing.get_context("spawn"), initializer=worker_init, initargs=initargs)
     futures = []
