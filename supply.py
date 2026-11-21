@@ -78,7 +78,7 @@ class SupplyDrops:
                 return False
         return True
 
-    def _threatened(self, item, obs, finish):
+    def _threatened(self, item, obs, finish, staging=False):
         me, point = obs["self"], item["pos"][:2]
         pos = me["pos"][:2]
         # Foreign progress cannot be stolen safely. A frozen clock may have an
@@ -93,11 +93,15 @@ class SupplyDrops:
                 if min(here, there) < 50.0:
                     return True
                 continue
-            # Don't enter weapon contact or a race a visible competitor can
-            # contest before our capture plus a two-second escape reserve.
-            reach = max(0.0, there - float(item["radius"])) / rival_speed
-            if here < 70.0 or there < 80.0 or reach <= finish + 2.0:
-                return True
+            if staging:
+                # Distant sightings need not forbid safe early transit. Near
+                # landing, the ordinary race/contact checks below apply again.
+                if here < 60.0 or there < 65.0:
+                    return True
+            else:
+                reach = max(0.0, there - float(item["radius"])) / rival_speed
+                if here < 70.0 or there < 80.0 or reach <= finish + 2.0:
+                    return True
         for sound in obs.get("sounds", ()):
             if (sound.get("dist") == "near" and sound.get("age", 0.0) < 1.0
                     and sound["kind"] in ("gun", "mortar", "explosion", "laser",
@@ -119,6 +123,7 @@ class SupplyDrops:
         remaining = max(0.0, capture - float(item["progress"])) if own else capture
         travel = distance * 1.25 / speed
         lands_in = max(0.0, float(item["lands_in"]))
+        staging = lands_in > 6.0 and item.get("holder") is None
         wait = max(0.0, lands_in - travel)
         work = wait + remaining
         finish = travel + work + 0.7
@@ -145,11 +150,15 @@ class SupplyDrops:
         value = 4.0 * hp + (0.7 * energy if distance < 30.0 else 0.0)
         value += 2.0 * cube_value + (0.7 if upgrade else 0.0)
         holding = (self._target == item["id"] and distance < float(item["radius"]) - 1.0)
-        if not holding and (value < 0.6 or distance > 120.0 or extra > speed * 8.0):
+        # Broader routing applies only to the falling, unclaimed stage. Use
+        # current distance when switching back to strict capture admission.
+        max_distance, detour_seconds = (180.0, 16.0) if staging else (120.0, 8.0)
+        if not holding and (value < 0.6 or distance > max_distance
+                            or extra > speed * detour_seconds):
             return None
         if hp > 0.70 and distance > 30.0:
             return None
-        if self._threatened(item, obs, finish):
+        if self._threatened(item, obs, finish, staging=staging):
             return None
         if not self._zone_safe(point, obs, travel, work, speed, radius):
             return None
