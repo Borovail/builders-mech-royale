@@ -1,4 +1,4 @@
-"""E27: a bounded mortar aiming window while the primary gun reloads.
+"""E28: E27 mortar aim plus one-observation slews with a loaded primary.
 
 decide returns None (use ordinary policy) or (aim, [gun, mortar]).
 Projectile math uses published speed/gravity and muzzle offset; no engine API.
@@ -49,8 +49,12 @@ class Mortar:
         self.config = hello.get('config', {})
         self.navigator = navigator
         self.target_id = None
+        self.window_kind = None
         self.deadline = self.cooldown = 0.
         self.stats = dict(windows=0, shots=0, aborted=0, blocked=0, aiming_seconds=0.)
+        for kind in ('reload', 'loaded'):
+            self.stats.update({kind + '_windows': 0, kind + '_shots': 0,
+                               kind + '_aborted': 0, kind + '_aiming_seconds': 0.})
         self._last_t = None
 
     @staticmethod
@@ -121,13 +125,16 @@ class Mortar:
     def _finish(self, now, failed):
         if failed:
             self.stats['aborted'] += 1
+            self.stats[self.window_kind + '_aborted'] += 1
         self.target_id = None
+        self.window_kind = None
         self.cooldown = now + .6
 
     def decide(self, obs, target):
         now, me = obs['t'], obs['self']
         if self._last_t is not None and self.target_id is not None:
             self.stats['aiming_seconds'] += max(0., now - self._last_t)
+            self.stats[self.window_kind + '_aiming_seconds'] += max(0., now - self._last_t)
         self._last_t = now
         slots = me.get('weapons', ())
         active = self.target_id is not None
@@ -139,11 +146,15 @@ class Mortar:
                 self._finish(now, True)
             return None
         gun, mortar = slots[:2]
+        gun_reload = gun.get('reload', 0)
+        loaded = gun_reload == 0 and gun.get('ammo', 0) > 0
         if active and (target['id'] != self.target_id or now >= self.deadline
-                       or gun.get('reload', 0) <= .15 or mortar.get('cooldown', 0) > 0):
+                       or (self.window_kind == 'reload' and gun_reload <= .15)
+                       or (self.window_kind == 'loaded' and not loaded)
+                       or mortar.get('cooldown', 0) > 0):
             self._finish(now, True)
             return None
-        if not active and (now < self.cooldown or gun.get('reload', 0) < .5
+        if not active and (now < self.cooldown or (gun_reload < .5 and not loaded)
                            or mortar.get('cooldown', 0) > 0):
             return None
         mech = {**self.config.get('mech', {}), **me.get('stats', {})}
@@ -168,6 +179,14 @@ class Mortar:
             yaw, pitch, flight, direction = solution
             if not mech['min_pitch'] <= pitch <= mech['max_pitch']:
                 raise ValueError('pitch')
+            if not active and gun_reload < .5:
+                match = self.config.get('match', {})
+                observation_s = float(match.get('decide_every', 2)) / float(match.get('tick_hz', 20))
+                yaw_s = abs(math.remainder(yaw - me['aim'][0], math.tau)) / float(mech['turn_rate'])
+                pitch_s = abs(pitch - me['aim'][1]) / float(mech['pitch_rate'])
+                if (not math.isfinite(observation_s) or observation_s <= 0
+                        or max(yaw_s, pitch_s) > observation_s + 1e-9):
+                    raise ValueError('loaded gun slew exceeds one observation')
             if not self._clear(origin, direction, speed, gravity, radius + .5, flight):
                 self.stats['blocked'] += 1
                 raise ValueError('trajectory')
@@ -177,13 +196,16 @@ class Mortar:
             return None
         if not active:
             self.target_id, self.deadline = target['id'], now + self.WINDOW
+            self.window_kind = 'reload' if gun_reload >= .5 else 'loaded'
             self.stats['windows'] += 1
+            self.stats[self.window_kind + '_windows'] += 1
         actual = me['aim']
         error_yaw = math.remainder(yaw - actual[0], math.tau)
         error_pitch = pitch - actual[1]
         tolerance = min(.04, 2 / max(1., speed * flight))
         if math.hypot(error_yaw * math.cos(pitch), error_pitch) <= tolerance:
             self.stats['shots'] += 1
+            self.stats[self.window_kind + '_shots'] += 1
             self._finish(now, False)
             return [yaw, pitch], [False, True]
         return [yaw, pitch], [False, False]

@@ -10,7 +10,7 @@ from supply import SupplyDrops
 
 
 class Bot:
-    name = "Borovail E27"
+    name = "Borovail E28"
 
     def __init__(self, hello: mf.Hello):
         self.navigator = Navigator.from_hello(hello)
