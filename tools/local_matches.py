@@ -59,6 +59,16 @@ _draw = None
 _worker_init_s = None
 
 
+class PlanningClock:
+    """Deterministic navigation budget only; benchmark timing stays real."""
+    def __init__(self):
+        self.value = 0.0
+
+    def perf_counter(self):
+        self.value += 0.000001
+        return self.value
+
+
 def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -85,7 +95,7 @@ def load_file(name, path):
     return module
 
 
-def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies):
+def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies, fixed_planning=False):
     global _arena, _bot_class, _draw, _worker_init_s
     start = time.perf_counter()
     engine, bot_dir = Path(engine), Path(bot_dir)
@@ -111,6 +121,10 @@ def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies):
     bot = load_file("_benchmark_evaluated_bot", bot_dir / "example_bot.py")
     if Path(sys.modules["navigation"].__file__).resolve() != (bot_dir / "navigation.py").resolve():
         raise RuntimeError("Bot imported navigation from outside --bot-dir")
+    if fixed_planning:
+        # Replace the evaluated module's binding, never the shared time module
+        # or the independent engine navigator. Search limits remain the bot's.
+        sys.modules["navigation"].time = PlanningClock()
     _bot_class = bot.Bot
     _draw = getattr(sys.modules.get("mechfight"), "draw", None)
     _arena = squad.SquadArena(kit)
@@ -207,6 +221,8 @@ def main(argv=None):
     parser.add_argument("--json", type=Path)
     parser.add_argument("--csv", type=Path)
     parser.add_argument("--supplies", action="store_true", help="Enable the unofficial supply-ring extension")
+    parser.add_argument("--fixed-planning", action="store_true",
+                        help="Diagnostic: advance only bot navigation's planning clock by 1 us per call")
     args = parser.parse_args(argv)
     if args.count < 1 or args.workers < 1:
         parser.error("--count and --workers must be positive")
@@ -225,6 +241,7 @@ def main(argv=None):
                 "bot_git": git_info(args.bot_dir), "seeds_start": args.seeds,
                 "count": args.count, "workers": min(args.workers, args.count),
                 "python": sys.version, "platform": sys.platform, "caveats": CAVEATS,
+                "planning_clock": {"mode": "wall_clock"},
                 "_start": time.perf_counter()}
     if args.supplies:
         metadata["extension_sha256"] = sha256(Path(__file__).with_name("supply_arena.py"))
@@ -233,8 +250,19 @@ def main(argv=None):
             "Rings use sampled open ground and horizontal occupancy. Rival policies do not seek them.",
             "The exact drop distribution, landing sound and official upgrade queue are not modeled.",
         ]
+    if args.fixed_planning:
+        metadata["planning_clock"] = {
+            "mode": "fixed_counter", "seconds_per_perf_counter_call": 0.000001,
+            "scope": "evaluated bot navigation module only",
+            "navigation_sha256": source_hashes["navigation.py"],
+            "latency_clock": "real wall clock",
+        }
+        metadata["caveats"] = [c for c in metadata["caveats"]
+                               if not c.startswith("Policies with wall-clock planning budgets")] + [
+            "Diagnostic fixed planning clock changes bot A* time slicing; real latency is still measured.",
+        ]
     results = []
-    initargs = tuple(str(p) for p in (args.engine, args.kit, args.bot_dir)) + (source_hashes, args.supplies)
+    initargs = tuple(str(p) for p in (args.engine, args.kit, args.bot_dir)) + (source_hashes, args.supplies, args.fixed_planning)
     pool = ProcessPoolExecutor(max_workers=metadata["workers"],
             mp_context=multiprocessing.get_context("spawn"), initializer=worker_init, initargs=initargs)
     futures = []
