@@ -22,6 +22,7 @@ class Recovery:
     GROUND_CHECKS = 24
     MAX_PATH = 55.0
     HOLD_SECONDS = 22.0
+    GROUND_GRACE = 0.4
 
     def __init__(self, hello, navigator):
         self.config = hello["config"]
@@ -35,6 +36,7 @@ class Recovery:
         self._known = {}
         self._previous = None
         self._last_damage = self._last_combat = -math.inf
+        self._last_grounded = -math.inf
         self._next_search = self._cooldown = 0.0
         self._route = []
         self._cover_prisms = []
@@ -203,9 +205,16 @@ class Recovery:
         now, me, nav = obs["t"], obs["self"], self.navigator
         radius = float(me["stats"]["radius"])
         speed = max(1.0, float(me["stats"].get("walk_speed", self.config["mech"]["walk_speed"])))
-        grounded = (nav.available and me["grounded"]
-                    and abs(me["pos"][2] - nav.ground(*me["pos"][:2])) <= nav.step_up + 0.2)
-        if not grounded or not me["in_zone"]:
+        near_ground = (nav.available
+                       and abs(me["pos"][2] - nav.ground(*me["pos"][:2])) <= nav.step_up + 0.2)
+        grounded = near_ground and me["grounded"]
+        if grounded:
+            self._last_grounded = now
+        # A small terrain lip can briefly lift a moving mech off the surface.
+        # Keep the verified route until it lands or the short grace expires.
+        brief_lift = (self.phase == "approach" and near_ground
+                      and now - self._last_grounded <= self.GROUND_GRACE)
+        if not me["in_zone"] or not (grounded or brief_lift):
             if self.phase != "idle":
                 self._release(now, "ground_or_zone")
             return None
@@ -240,7 +249,7 @@ class Recovery:
             if now - self._progress_at > 2.0 or now - self._started > 8.0:
                 self._release(now, "stalled")
                 return None
-            if distance < 1.25:
+            if grounded and distance < 1.25:
                 if len(self._route) > 1:
                     self._route.pop(0)
                     self._best_distance = math.inf
