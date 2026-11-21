@@ -35,6 +35,23 @@ tar -xzf "$CHECK_KIT_DIR/mechfight-kit.tar.gz" -C "$CHECK_KIT_DIR"
 KIT_DIR="$CHECK_KIT_DIR/mechfight-kit"
 ```
 
+## Сыграть локальную серию из 48 матчей
+
+Стенд `SquadArena` проекта GT Goats играет 16-меховые матчи на карте из стартового набора. Адаптер загружает только симуляцию и её навигатор, сверяет файлы по SHA256 и получает действие нашего бота через `Bot.act`. Код участника GT Goats для управления мехом не используется. Соперники, физика и ресурсы в симуляторе приближённые. Задержки решений измеряются, пропуск просроченных действий проверяется отдельно официальной программой. [Исходники стенда и MIT-лицензия](https://github.com/atharvatripathi2026/gtgoats_mech_royale/tree/4b8012873dfd7ae43371fe0ee663104a6efebcc1)
+
+Для воспроизведения на Linux выполните команды ниже после распаковки комплекта. Запускайте обе версии с одинаковым числом процессов. Параметр `--bot-dir` позволяет выбрать извлечённый через `git archive` коммит. Сравнивайте попарно одинаковые номера матчей. На скорость поиска пути влияет загрузка процессора, поэтому отдельные матчи при повторе могут отличаться.
+
+```sh
+ENGINE="$CHECK_KIT_DIR/engine"
+mkdir -p "$ENGINE/training"
+REV=4b8012873dfd7ae43371fe0ee663104a6efebcc1
+for f in navigation.py training/arena.py training/squad16.py LICENSE; do
+  curl -fsSL "https://raw.githubusercontent.com/atharvatripathi2026/gtgoats_mech_royale/$REV/$f" -o "$ENGINE/$f" || exit 1
+done
+python3 tools/local_matches.py --engine "$ENGINE" --kit "$KIT_DIR" --bot-dir . \
+  --seeds 2001 --count 48 --workers 5 --json artifacts/series.json --csv artifacts/series.csv
+```
+
 ## Проверить бота
 
 Для проверки движения прогоните три сценария — путь через здание, старт вплотную к стене и свободный участок. Затем запустите точку входа проекта на записи организатора и проверьте формат и скорость ответов.
