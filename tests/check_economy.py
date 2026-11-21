@@ -356,7 +356,7 @@ def load_bot(path, name):
     # A historical --baseline directory must import its own navigation and
     # mobility, even after the candidate has been loaded into this process.
     # Each Bot class retains references to its own imported module objects.
-    names = ("mechfight", "navigation", "mobility", "economy", "secondary", "supply")
+    names = ("mechfight", "navigation", "mobility", "economy", "npc_guard", "secondary", "supply")
     saved = {key: sys.modules.pop(key) for key in names if key in sys.modules}
     previous_path = list(sys.path)
     try:
@@ -374,7 +374,8 @@ def load_bot(path, name):
 
 
 def source_hashes(path):
-    names = (path.name, "mechfight.py", "navigation.py", "mobility.py", "economy.py", "secondary.py", "supply.py")
+    names = (path.name, "mechfight.py", "navigation.py", "mobility.py", "economy.py",
+             "npc_guard.py", "secondary.py", "supply.py")
     return {name: hashlib.sha256((path.parent/name).read_bytes()).hexdigest()
             for name in names if (path.parent/name).is_file()}
 

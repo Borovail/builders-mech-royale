@@ -4,17 +4,19 @@ import mechfight as mf
 from economy import Economy
 from mobility import Mobility
 from navigation import Navigator
+from npc_guard import NpcGuard
 from secondary import Secondary
 from supply import SupplyDrops
 
 
 class Bot:
-    name = "Borovail E15"
+    name = "Borovail E32"
 
     def __init__(self, hello: mf.Hello):
         self.navigator = Navigator.from_hello(hello)
         self.mobility = Mobility(hello)
         self.economy = Economy(hello, self.navigator)
+        self.npc_guard = NpcGuard(hello)
         self.secondary = Secondary(hello)
         self.supplies = SupplyDrops(hello, self.navigator)
         self.crate_height = hello["config"]["crates"]["height"]
@@ -39,7 +41,10 @@ class Bot:
             jump = False
         act.update(move=list(direction), aim=[yaw, 0.0],
                    boost=not holding and self.mobility.boost(obs, direction, jumping=jump), jump=jump)
-        if enemies:
+        npc_aim = self.npc_guard.aim(obs, enemies)
+        if npc_aim is not None:
+            act.update(aim=npc_aim, fire=[True, False])
+        elif enemies:
             t = enemies[0]["pos"]
             aim = [math.atan2(t[1] - y, t[0] - x), math.atan2(t[2] - z - 2.5, math.dist(t[:2], (x, y)))]
             act.update(aim=aim, fire=[True, self.secondary.trigger(obs, enemies[0])])
