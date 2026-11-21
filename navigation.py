@@ -63,6 +63,7 @@ class Navigator:
         self._target = None
         self._radius = None
         self._exhausted = False
+        self._precise = False
         self._halted_at = None
         self._walk = {}
         self._heights = {}
@@ -181,7 +182,7 @@ class Navigator:
             ground = self.ground(x, y)
             self._heights[node] = ground
             # Any point on a grid edge is <= half its diagonal from an end.
-            margin = self._CELL * math.sqrt(2) / 2 + 0.05
+            margin = 0.51 if self._precise else self._CELL * math.sqrt(2) / 2 + 0.05
             self._walk[node] = not self._blocked(x, y, radius + margin,
                                                    radius * self.height_ratio, ground)
         return self._walk[node]
@@ -201,6 +202,10 @@ class Navigator:
                     clear = False
                     break
                 previous = ground
+            if clear and self._precise:
+                # The recovery graph cannot rely on inflated endpoints to
+                # cover an entire edge: validate the swept cylinder itself.
+                clear = self.clear_ground_segment(pa, pb, self._radius)
             self._edges[key] = clear
         return self._edges[key]
 
@@ -318,6 +323,7 @@ class Navigator:
             self._search = None
             self._goal, self._radius = goal, radius
             self._exhausted = False
+            self._precise = False
             self._halted_at = None
             self._walk.clear()
             self._heights.clear()
@@ -357,6 +363,19 @@ class Navigator:
         # While searching, hold still if even the explored prefix is obstructed.
         # Never repeatedly command movement into a known wall.
         if self._search is not None or self._exhausted:
+            if self._exhausted and not self._precise:
+                # A legal position can be isolated by the conservative grid
+                # margin. Retry once with exact edge clearance, on the next
+                # decision's ordinary incremental search budget.
+                self._precise = True
+                self.route = []
+                self._search = None
+                self._exhausted = False
+                self._halted_at = None
+                self._walk.clear()
+                self._heights.clear()
+                self._edges.clear()
+                return (0.0, 0.0)
             if self._exhausted and self._halted_at is None:
                 self._halted_at = pos
             return (0.0, 0.0)
