@@ -37,6 +37,9 @@ jobs:
       - name: Check E01 routes
         run: python3 tests/check_routes.py --kit "$KIT_DIR"
 
+      - name: Check E05 ground boost and energy
+        run: python3 tests/check_mobility.py --kit "$KIT_DIR"
+
       - name: Build Linux amd64 image
         run: docker build --platform linux/amd64 -t mech-royale-check .
 

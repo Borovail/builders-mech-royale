@@ -4,6 +4,8 @@
 
 Коммит `2411871` хранит исходный Python-пример организатора. Из него взяты обёртка протокола `mechfight.py` и базовая логика в `example_bot.py`. Собственный алгоритм движения находится в `navigation.py`. Независимая проверка сравнивает поведение двух версий на геометрии официальной карты.
 
+Версия E01 с обходом препятствий получила 1,56 очка за место в официальной практике. В E05 модуль `mobility.py` расходует часть запаса энергии на наземное ускорение при контакте в круге. Ускорение выключается перед прыжком или когда энергия подходит к резерву. Сравнение за 48 игровых матчей ведём в [журнале экспериментов](PLAN.md).
+
 Комплект получен 21 ноября 2026 года. Ниже указана контрольная сумма SHA256 скачанного архива. [Официальный стартовый набор Builders](https://www.joinbuilders.org/buildathon/tracks/builders/files/mechfight-kit.tar.gz)
 
 ```text
@@ -39,6 +41,7 @@ KIT_DIR="$CHECK_KIT_DIR/mechfight-kit"
 
 ```sh
 python3 tests/check_routes.py --kit "$KIT_DIR"
+python3 tests/check_mobility.py --kit "$KIT_DIR"
 python3 "$KIT_DIR/check/check.py" --map-dir "$KIT_DIR/arena" \
   -- python3 -u ./example_bot.py
 ```

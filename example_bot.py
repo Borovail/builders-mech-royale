@@ -1,15 +1,17 @@
 """Mech Royale bot with obstacle-aware movement toward the next safe circle."""
 import math
 import mechfight as mf
+from mobility import Mobility
 from navigation import Navigator
 
 
 class Bot:
-    name = "Borovail E01"
+    name = "Borovail E05"
 
     def __init__(self, hello: mf.Hello):
         self.reach = hello["config"]["loot"]["pickup_radius"]
         self.navigator = Navigator.from_hello(hello)
+        self.mobility = Mobility(hello)
 
     def act(self, obs: mf.Observation) -> mf.Action:
         me = obs["self"]
@@ -24,7 +26,9 @@ class Bot:
         enemies = sorted((m for m in obs["mechs"] if m["kind"] == "mech"), key=lambda m: math.dist(m["pos"], me["pos"]))
         yaw = math.atan2(goal[1] - y, goal[0] - x)
         direction = self.navigator.direction(me["pos"], goal, me["stats"]["radius"])
-        act.update(move=list(direction), aim=[yaw, 0.0], boost=not me["in_zone"], jump=obs["tick"] % 40 == 0)
+        jump = obs["tick"] % 40 == 0
+        act.update(move=list(direction), aim=[yaw, 0.0],
+                   boost=self.mobility.boost(obs, direction, jumping=jump), jump=jump)
         if enemies:
             t = enemies[0]["pos"]
             aim = [math.atan2(t[1] - y, t[0] - x), math.atan2(t[2] - z - 2.5, math.dist(t[:2], (x, y)))]
