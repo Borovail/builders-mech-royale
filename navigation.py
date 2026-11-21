@@ -34,12 +34,10 @@ def _inside(x, y, edges):
     return inside
 
 
-def _distance2(x, y, edge):
+def _project_edge(edge):
     ax, ay, bx, by = edge
     dx, dy = bx - ax, by - ay
-    length2 = dx * dx + dy * dy
-    t = max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / length2)) if length2 else 0.0
-    return (x - ax - t * dx) ** 2 + (y - ay - t * dy) ** 2
+    return ax, ay, dx, dy, dx * dx + dy * dy
 
 
 class Navigator:
@@ -68,6 +66,7 @@ class Navigator:
         self._heights = {}
         self._edges = {}
         self._bins = {}
+        self._projected_edges = []
 
     @classmethod
     def from_hello(cls, hello):
@@ -106,8 +105,9 @@ class Navigator:
                 xs, ys = item["ring"][::2], item["ring"][1::2]
                 box = (min(xs), min(ys), max(xs), max(ys))
                 index = len(nav.prisms)
-                nav.prisms.append((box, float(item["base"]), float(item["top"]), outer, holes,
-                                   outer + [edge for hole in holes for edge in hole]))
+                edges = outer + [edge for hole in holes for edge in hole]
+                nav.prisms.append((box, float(item["base"]), float(item["top"]), outer, holes, edges))
+                nav._projected_edges.append(tuple(_project_edge(edge) for edge in edges))
                 for iy in range(math.floor(box[1] / nav._BIN), math.floor(box[3] / nav._BIN) + 1):
                     for ix in range(math.floor(box[0] / nav._BIN), math.floor(box[2] / nav._BIN) + 1):
                         nav._bins.setdefault((ix, iy), []).append(index)
@@ -139,16 +139,23 @@ class Navigator:
         lowx, lowy, highx, highy = self.bounds
         if x - radius < lowx or y - radius < lowy or x + radius > highx or y + radius > highy:
             return True
+        radius_squared = radius * radius
         for index in self._candidates(x, y, radius):
-            box, base, top, outer, holes, edges = self.prisms[index]
+            box, base, top, outer, holes, _ = self.prisms[index]
             if (top <= ground + self.step_up or base >= ground + height
                     or x + radius < box[0] or x - radius > box[2]
                     or y + radius < box[1] or y - radius > box[3]):
                 continue
             if _inside(x, y, outer) and not any(_inside(x, y, hole) for hole in holes):
                 return True
-            if any(_distance2(x, y, edge) < radius * radius for edge in edges):
-                return True
+            for ax, ay, dx, dy, length_squared in self._projected_edges[index]:
+                offset_x, offset_y = x - ax, y - ay
+                fraction = ((offset_x * dx + offset_y * dy) / length_squared
+                            if length_squared else 0.0)
+                fraction = max(0.0, min(1.0, fraction))
+                distance_squared = (offset_x - fraction * dx) ** 2 + (offset_y - fraction * dy) ** 2
+                if distance_squared < radius_squared:
+                    return True
         return False
 
     def clear_ground_segment(self, a, b, radius):
