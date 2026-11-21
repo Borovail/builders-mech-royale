@@ -151,7 +151,7 @@ class Navigator:
                 return True
         return False
 
-    def _clear(self, a, b, radius):
+    def clear_ground_segment(self, a, b, radius):
         # A half-metre extra clearance covers the space between 1 m samples.
         dx, dy = b[0] - a[0], b[1] - a[1]
         length = math.hypot(dx, dy)
@@ -209,7 +209,7 @@ class Navigator:
         starts = [(center[0] + dx, center[1] + dy) for dx in range(-2, 3) for dy in range(-2, 3)]
         starts.sort(key=lambda node: math.dist(pos, self._point(node)))
         start = next((node for node in starts if self._walkable(node, radius)
-                      and self._clear(pos, self._point(node), radius)), None)
+                      and self.clear_ground_segment(pos, self._point(node), radius)), None)
         if start is None:
             self._exhausted = True
             return
@@ -281,7 +281,7 @@ class Navigator:
             if h < search["best_h"]:
                 search["best"], search["best_h"] = node, h
             # Only test the long shortcut near the goal: geometry work is bounded.
-            if h <= 9 and self._clear(point, goal, radius):
+            if h <= 9 and self.clear_ground_segment(point, goal, radius):
                 self.route = self._path(search, node) + [goal]
                 self._search = None
                 return
@@ -328,7 +328,7 @@ class Navigator:
             self._search = None
             self._exhausted = False
             self._halted_at = None
-        if self._clear(pos, goal, radius):
+        if self.clear_ground_segment(pos, goal, radius):
             self.route = []
             self._search = None
             return direct
@@ -350,7 +350,7 @@ class Navigator:
             point = route[i]
             if math.dist(pos, point) < 0.75:
                 continue
-            if self._clear(pos, point, radius):
+            if self.clear_ground_segment(pos, point, radius):
                 if self.route:
                     del self.route[:i]
                 return _unit(pos, point)
