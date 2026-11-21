@@ -1,4 +1,4 @@
-"""Conservative supply-drop detours using the public mechfight/1 rules.
+"""Preposition at safe announced supply rings using public mechfight/1 rules.
 
 ``SupplyDrops(hello, navigator).decide(obs)`` returns ``None`` to leave the
 ordinary Economy decision untouched, or ``{destination, reason, hold, drop_id}``.
@@ -25,6 +25,7 @@ class SupplyDrops:
         self._target = None
         self._blocked = {}
         self._geometry = {}
+        self._retreat_geometry = {}
         self._last_damage = -math.inf
         self._started = self._advanced = 0.0
         self._best_distance = math.inf
@@ -53,6 +54,21 @@ class SupplyDrops:
             return False
         radial = math.dist(point, zone["next_center"])
         escape = max(0.0, radial - max(0.0, zone["next_radius"] - margin))
+        # Early reservations must not buy a long or obstructed retreat after
+        # capture. Rings already in the next circle need no return leg.
+        if escape / speed > 8.0:
+            return False
+        exit_point = tuple(a + (b - a) * escape / radial
+                           for a, b in zip(point, zone["next_center"])) if radial else point
+        if escape:
+            key = (tuple(point), tuple(exit_point), radius)
+            if key not in self._retreat_geometry:
+                if len(self._retreat_geometry) >= 64:
+                    self._retreat_geometry.clear()
+                self._retreat_geometry[key] = self.navigator.clear_ground_segment(
+                    point, exit_point, radius)
+            if not self._retreat_geometry[key]:
+                return False
         duration = 1.4 * escape / speed + 1.0
         for fraction in (0.0, 0.5, 1.0):
             p = tuple(a + (b - a) * escape * fraction / radial
@@ -106,14 +122,13 @@ class SupplyDrops:
         wait = max(0.0, lands_in - travel)
         work = wait + remaining
         finish = travel + work + 0.7
-        # Three seconds is an entry gate, not a moving cancellation threshold:
-        # a faster-than-estimated approach naturally increases the wait. Keep
-        # an accepted landing schedule, with one second of observation slack,
-        # while retaining the overall target timeout and every safety check.
+        # Public announcements are a strategic destination before landing.
+        # Bound the planned stationary exposure and total commitment, while
+        # retaining the accepted schedule if arrival is faster than estimated.
         active = self._target == item["id"]
-        if ((not active and wait > 3.0)
+        if ((not active and lands_in > 25.0)
                 or (active and lands_in > 0.0 and now + lands_in > self._landing_deadline)
-                or finish > 20.0):
+                or work > 30.0 or finish > 35.0):
             return None
         goal = obs["zone"]["next_center"]
         extra = max(0.0, distance + math.dist(point, goal) - math.dist(me["pos"][:2], goal))
@@ -138,7 +153,9 @@ class SupplyDrops:
             return None
         if not self._zone_safe(point, obs, travel, work, speed, radius):
             return None
-        return value / (2.0 + finish + extra / speed), distance, finish
+        retreat = max(0.0, math.dist(point, goal)
+                      - max(0.0, obs["zone"]["next_radius"] - radius - 3.0))
+        return value / (2.0 + finish + extra / speed + retreat / speed), distance, finish
 
     def _accessible(self, item, me, now, radius):
         nav, point, pos = self.navigator, item["pos"], me["pos"]
@@ -221,7 +238,7 @@ class SupplyDrops:
                 self._started = self._advanced = now
                 self._best_distance = distance
                 self._best_progress = float(item["progress"]) if item.get("holder") == me["id"] else 0.0
-                self._limit = min(25.0, finish * 1.5 + 3.0)
+                self._limit = min(40.0, finish + 5.0)
                 self._landing_deadline = now + max(0.0, float(item["lands_in"])) + 1.0
                 return self._decision(item, me)
         return None

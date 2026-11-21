@@ -206,7 +206,7 @@ def safety(factory, hello, template, arena):
         if mode == "critical_hp_far":
             obs["self"]["hp"] = 400
         elif mode == "long_fall":
-            obs["drops"][0]["lands_in"] = 25
+            obs["drops"][0]["lands_in"] = 26
         elif mode == "no_resource_need":
             obs["self"].update(hp=obs["self"]["max_hp"], energy=100, cubes=45)
         elif mode == "outside_zone":

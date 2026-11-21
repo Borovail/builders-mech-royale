@@ -59,6 +59,12 @@ jobs:
           git archive 6ba4e8105a9de2a6f438da7761da22b4ab04ee44 | tar -xf - -C "$previous"
           python3 tests/check_supplies.py --kit "$KIT_DIR" --baseline "$previous/example_bot.py"
 
+      - name: Compare early supply reservation against E15
+        run: |
+          previous="$(mktemp -d)"
+          git archive 5daf4801186168701f0721f024352d4922cec85f | tar -xf - -C "$previous"
+          python3 tests/check_strategy_supply.py --kit "$KIT_DIR" --bot example_bot.py --baseline "$previous/example_bot.py"
+
       - name: Check local referee supplies, cube growth and initial spawns
         run: python3 -m unittest discover -s tests -p 'test_*arena.py'
 
