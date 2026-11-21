@@ -4,15 +4,17 @@ import mechfight as mf
 from economy import Economy
 from mobility import Mobility
 from navigation import Navigator
+from recovery_move import RecoveryMove
 from secondary import Secondary
 from supply import SupplyDrops
 
 
 class Bot:
-    name = "Borovail E15"
+    name = "Borovail E18"
 
     def __init__(self, hello: mf.Hello):
         self.navigator = Navigator.from_hello(hello)
+        self.recovery = RecoveryMove(self.navigator)
         self.mobility = Mobility(hello)
         self.economy = Economy(hello, self.navigator)
         self.secondary = Secondary(hello)
@@ -34,6 +36,15 @@ class Bot:
         enemies = sorted((m for m in obs["mechs"] if m["kind"] == "mech"), key=lambda m: math.dist(m["pos"], me["pos"]))
         yaw = math.atan2(goal[1] - y, goal[0] - x)
         direction = (0.0, 0.0) if holding else self.navigator.direction(me["pos"], goal, me["stats"]["radius"])
+        recovery_goal = self.recovery.destination(
+            obs, goal, direction,
+            allowed=supply is None and choice["reason"] in ("none", "danger", "ground"),
+        )
+        if recovery_goal is not None:
+            goal = recovery_goal
+            dx, dy = goal[0] - x, goal[1] - y
+            distance = math.hypot(dx, dy)
+            direction = (dx / distance, dy / distance)
         jump = obs["tick"] % 40 == 0 and supply is None
         if me["grounded"] and me["in_zone"] and any(direction):
             jump = False
