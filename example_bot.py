@@ -1,6 +1,7 @@
 """Mech Royale bot with obstacle-aware movement toward the next safe circle."""
 import math
 import mechfight as mf
+from early_route import EarlyRoute
 from economy import Economy
 from mobility import Mobility
 from navigation import Navigator
@@ -9,10 +10,11 @@ from supply import SupplyDrops
 
 
 class Bot:
-    name = "Borovail E10"
+    name = "Borovail E16"
 
     def __init__(self, hello: mf.Hello):
         self.navigator = Navigator.from_hello(hello)
+        self.early_route = EarlyRoute(self.navigator)
         self.mobility = Mobility(hello)
         self.economy = Economy(hello, self.navigator)
         self.secondary = Secondary(hello)
@@ -32,6 +34,12 @@ class Bot:
         if choice["pickup_id"] is not None:
             act["take"] = choice["pickup_id"]
         enemies = sorted((m for m in obs["mechs"] if m["kind"] == "mech"), key=lambda m: math.dist(m["pos"], me["pos"]))
+        if (obs["t"] < 45 and me["in_zone"] and me["weapons"][1] is None
+                and not enemies and supply is None and choice["reason"] == "none"):
+            if me["grounded"]:
+                goal = self.early_route.destination(obs, goal)
+        else:
+            self.early_route.reset()
         yaw = math.atan2(goal[1] - y, goal[0] - x)
         direction = (0.0, 0.0) if holding else self.navigator.direction(me["pos"], goal, me["stats"]["radius"])
         jump = obs["tick"] % 40 == 0 and supply is None
