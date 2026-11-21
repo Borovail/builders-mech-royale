@@ -140,6 +140,7 @@ class MeasuredBot:
             _draw.clear()
         self.bot = _bot_class(hello)
         self.latencies = []
+        self.first_cube_s = self.first_secondary_s = self.hp_at_60 = None
 
     def __getattr__(self, name):
         return getattr(self.bot, name)
@@ -147,6 +148,13 @@ class MeasuredBot:
     def act(self, obs):
         if _draw is not None:
             _draw.clear()
+        me = obs["self"]
+        if self.first_cube_s is None and me["cubes"] > 0:
+            self.first_cube_s = obs["t"]
+        if self.first_secondary_s is None and len(me["weapons"]) > 1 and me["weapons"][1]:
+            self.first_secondary_s = obs["t"]
+        if self.hp_at_60 is None and obs["t"] >= 60:
+            self.hp_at_60 = me["hp"]
         start = time.perf_counter()
         result = self.bot.act(obs)
         self.latencies.append((time.perf_counter() - start) * 1000)
@@ -175,6 +183,8 @@ def run_seed(seed):
         raise ValueError(f"Engine score is incompatible with 16-mech place: {result!r}")
     latency = sorted(measured.latencies)
     return {**result, "seed": seed, "place": place, "score": score,
+            "first_cube_s": measured.first_cube_s, "first_secondary_s": measured.first_secondary_s,
+            "hp_at_60": measured.hp_at_60,
             "wall_s": time.perf_counter() - start, "worker_init_s": _worker_init_s,
             "decisions": len(latency), "decision_p99_ms": latency[max(0, math.ceil(.99 * len(latency)) - 1)],
             "decision_max_ms": max(latency), "exceptions": 0}
