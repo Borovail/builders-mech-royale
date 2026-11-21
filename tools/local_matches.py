@@ -96,7 +96,8 @@ def load_file(name, path):
     return module
 
 
-def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies, fixed_planning=False, cube_size=False):
+def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies, fixed_planning=False,
+                cube_size=False, audit_places=False):
     global _arena, _bot_class, _draw, _worker_init_s
     start = time.perf_counter()
     engine, bot_dir = Path(engine), Path(bot_dir)
@@ -117,6 +118,9 @@ def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies, fixed_pla
     if cube_size:
         from cube_size_arena import with_cube_size
         squad.SquadEpisode = with_cube_size(squad.SquadEpisode)
+    if audit_places:
+        from placement_audit import with_placement_audit
+        squad.SquadEpisode = with_placement_audit(squad.SquadEpisode)
     if sys.modules["training.arena"].Navigator is not engine_nav.Navigator:
         raise RuntimeError("Engine navigation namespace was not isolated")
     sys.modules["_benchmark_engine_navigation"] = engine_nav
@@ -241,6 +245,8 @@ def main(argv=None):
     parser.add_argument("--csv", type=Path)
     parser.add_argument("--supplies", action="store_true", help="Enable the unofficial supply-ring extension")
     parser.add_argument("--cube-size", action="store_true", help="Apply the published per-cube size scaling to every mech")
+    parser.add_argument("--audit-places", action="store_true",
+                        help="Record how rival eliminations and end-of-match ranking contribute to placement")
     parser.add_argument("--fixed-planning", action="store_true",
                         help="Diagnostic: advance only bot navigation's planning clock by 1 us per call")
     args = parser.parse_args(argv)
@@ -273,6 +279,8 @@ def main(argv=None):
     if args.cube_size:
         metadata["cube_size_sha256"] = sha256(Path(__file__).with_name("cube_size_arena.py"))
         metadata["engine_changes"].append("uncapped cube size scaling")
+    if args.audit_places:
+        metadata["placement_audit_sha256"] = sha256(Path(__file__).with_name("placement_audit.py"))
     if args.fixed_planning:
         metadata["planning_clock"] = {
             "mode": "fixed_counter", "seconds_per_perf_counter_call": 0.000001,
@@ -286,7 +294,7 @@ def main(argv=None):
         ]
     results = []
     initargs = tuple(str(p) for p in (args.engine, args.kit, args.bot_dir)) + (
-        source_hashes, args.supplies, args.fixed_planning, args.cube_size)
+        source_hashes, args.supplies, args.fixed_planning, args.cube_size, args.audit_places)
     pool = ProcessPoolExecutor(max_workers=metadata["workers"],
             mp_context=multiprocessing.get_context("spawn"), initializer=worker_init, initargs=initargs)
     futures = []

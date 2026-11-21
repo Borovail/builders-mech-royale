@@ -56,6 +56,9 @@ jobs:
       - name: Check local referee supplies and cube growth
         run: python3 -m unittest discover -s tests -p 'test_*arena.py'
 
+      - name: Check placement attribution for ties and timeout
+        run: python3 -m unittest discover -s tests -p test_placement_audit.py
+
       - name: Build Linux amd64 image
         run: docker build --platform linux/amd64 -t mech-royale-check .
 
