@@ -50,6 +50,12 @@ jobs:
       - name: Check E06 resource collection
         run: python3 tests/check_economy.py --kit "$KIT_DIR"
 
+      - name: Compare early upgrade growth against E15
+        run: |
+          previous="$(mktemp -d)"
+          git archive 5daf4801186168701f0721f024352d4922cec85f | tar -xf - -C "$previous"
+          python3 tests/check_strategy_growth.py --kit "$KIT_DIR" --bot example_bot.py --baseline "$previous/example_bot.py"
+
       - name: Check secondary slot controls
         run: python3 -m unittest discover -s tests -p test_secondary.py
 

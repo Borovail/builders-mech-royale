@@ -252,6 +252,37 @@ class Economy:
         self._geometry[key] = (now, tuple(pos[:2]), radius, result)
         return result
 
+    def _opening_growth(self, key, item, candidate, obs, visible, opponents, speed, radius):
+        """First three cubes: rank a short, safe visible source by growth/time."""
+        if key not in visible or key[0] not in ("cube", "crate"):
+            return None
+        me, point = obs["self"], item["pos"][:2]
+        _, distance, work = candidate
+        minimum_hp = 0.75 if key[0] == "crate" else 0.65
+        if me["hp"] < minimum_hp * me["max_hp"] or distance > 65:
+            return None
+        pos, goal = me["pos"][:2], obs["zone"]["next_center"]
+        extra = max(0.0, distance + math.dist(point, goal) - math.dist(pos, goal))
+        if extra > speed * 4 or 1.25 * distance / speed + work > 7.5:
+            return None
+        if any(math.dist(pos, actor["pos"][:2]) < 95
+               or math.dist(point, actor["pos"][:2]) < 95 for actor in opponents):
+            return None
+        if any(actor["kind"] == "npc" and math.dist(point, actor["pos"][:2]) < 60
+               for actor in obs.get("mechs", ())):
+            return None
+        if not self._zone_safe(point, obs, distance, speed, radius, work + 2.0):
+            return None
+        if key[0] == "crate":
+            amount = float(self.config["crates"].get("cubes", 1))
+        else:
+            # Value a cluster only as far as the opening objective. Its other
+            # cubes still have to pass their own approach and safety checks.
+            amount = sum(math.dist(point, cube["pos"][:2]) < 10
+                         for cube in obs.get("cubes", ())[:64])
+        amount = min(3.0 - me["cubes"], max(1.0, amount))
+        return amount / (1.5 + (distance + 0.8 * extra) / speed + work)
+
     def _decision(self, obs, key, item, visible, pick):
         pos, point = obs["self"]["pos"][:2], item["pos"][:2]
         kind = key[0]
@@ -305,6 +336,8 @@ class Economy:
         opponents = [actor for actor in obs.get("mechs", ()) if actor["kind"] == "mech"]
         speed = max(1.0, float(me["stats"].get("walk_speed", self.config["mech"]["walk_speed"])))
         radius = float(me["stats"]["radius"])
+        opening = now < 100.0 and me["cubes"] < 3
+        committed = None
         if self._target is not None:
             entry = self._memory.get(self._target)
             candidate = self._candidate(self._target, entry[0], obs, opponents, speed, radius) if entry else None
@@ -315,31 +348,48 @@ class Economy:
                 if now - self._started > self._target_limit or now - self._progress_at > 2.5:
                     self._release(now, 12.0)
                 elif self._accessible(self._target, entry[0], me, now, radius):
-                    return self._decision(obs, self._target, entry[0], visible, pick)
+                    decision = self._decision(obs, self._target, entry[0], visible, pick)
+                    if opening and self._target[0] == "pickup" and distance > speed * 2.5:
+                        committed = decision
+                    else:
+                        return decision
                 else:
                     self._release(now, 5.0)
             else:
                 self._release(now)
         if now < self._next_plan:
-            return fallback
+            return committed or fallback
         self._next_plan = now + 0.5
         candidates = []
         for key, (item, _, _) in self._memory.items():
             if key in self._blocked_until:
                 continue
+            if committed and (key[0] not in ("cube", "crate") or key not in visible):
+                continue
             candidate = self._candidate(key, item, obs, opponents, speed, radius)
             if candidate:
-                candidates.append((candidate[0], key, item, candidate[1], candidate[2]))
+                priority, score = 0, candidate[0]
+                if opening:
+                    growth = self._opening_growth(key, item, candidate, obs, visible, opponents, speed, radius)
+                    if growth is not None:
+                        priority, score = 1, growth
+                    elif committed:
+                        continue
+                    if key[0] == "pickup" and candidate[1] <= speed * 2.5:
+                        priority = 2
+                candidates.append((priority, score, key, item, candidate[1], candidate[2]))
         # Geometry sampling is bounded to four candidate approaches per half
         # second. Active targets use one cached check per second / 8 m moved.
-        candidates.sort(key=lambda row: row[0], reverse=True)
-        for _, key, item, distance, work in candidates[:4]:
+        candidates.sort(key=lambda row: row[:2], reverse=True)
+        for _, _, key, item, distance, work in candidates[:4]:
             if self._accessible(key, item, me, now, radius):
                 self._target = key
                 self._started = self._progress_at = now
                 self._best_distance = distance
                 self._target_limit = min(30.0, 1.7 * distance / speed + work + 5)
                 return self._decision(obs, key, item, visible, pick)
+        if committed:
+            return committed
         if opponents:
             fallback["reason"] = "danger"
         return fallback
