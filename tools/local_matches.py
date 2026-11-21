@@ -85,7 +85,7 @@ def load_file(name, path):
     return module
 
 
-def worker_init(engine, kit, bot_dir, expected_bot_manifest):
+def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies):
     global _arena, _bot_class, _draw, _worker_init_s
     start = time.perf_counter()
     engine, bot_dir = Path(engine), Path(bot_dir)
@@ -100,6 +100,9 @@ def worker_init(engine, kit, bot_dir, expected_bot_manifest):
     package.__path__ = [str(engine / "training")]
     sys.modules["training"] = package
     squad = importlib.import_module("training.squad16")
+    if supplies:
+        from supply_arena import with_supply_drops
+        squad.SquadEpisode = with_supply_drops(squad.SquadEpisode)
     if sys.modules["training.arena"].Navigator is not engine_nav.Navigator:
         raise RuntimeError("Engine navigation namespace was not isolated")
     sys.modules["_benchmark_engine_navigation"] = engine_nav
@@ -203,6 +206,7 @@ def main(argv=None):
     parser.add_argument("--workers", type=int, default=min(4, os.cpu_count() or 1))
     parser.add_argument("--json", type=Path)
     parser.add_argument("--csv", type=Path)
+    parser.add_argument("--supplies", action="store_true", help="Enable the unofficial supply-ring extension")
     args = parser.parse_args(argv)
     if args.count < 1 or args.workers < 1:
         parser.error("--count and --workers must be positive")
@@ -222,8 +226,15 @@ def main(argv=None):
                 "count": args.count, "workers": min(args.workers, args.count),
                 "python": sys.version, "platform": sys.platform, "caveats": CAVEATS,
                 "_start": time.perf_counter()}
+    if args.supplies:
+        metadata["extension_sha256"] = sha256(Path(__file__).with_name("supply_arena.py"))
+        metadata["engine_changes"] = ["local supply-ring subclass"]
+        metadata["caveats"] = [c.replace("; supply drops are absent", "") for c in CAVEATS] + [
+            "Rings use sampled open ground and horizontal occupancy. Rival policies do not seek them.",
+            "The exact drop distribution, landing sound and official upgrade queue are not modeled.",
+        ]
     results = []
-    initargs = tuple(str(p) for p in (args.engine, args.kit, args.bot_dir)) + (source_hashes,)
+    initargs = tuple(str(p) for p in (args.engine, args.kit, args.bot_dir)) + (source_hashes, args.supplies)
     pool = ProcessPoolExecutor(max_workers=metadata["workers"],
             mp_context=multiprocessing.get_context("spawn"), initializer=worker_init, initargs=initargs)
     futures = []
