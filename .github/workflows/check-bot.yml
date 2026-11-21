@@ -53,8 +53,8 @@ jobs:
           git archive 6ba4e8105a9de2a6f438da7761da22b4ab04ee44 | tar -xf - -C "$previous"
           python3 tests/check_supplies.py --kit "$KIT_DIR" --baseline "$previous/example_bot.py"
 
-      - name: Check local referee supply clock
-        run: python3 -m unittest discover -s tests -p test_supply_arena.py
+      - name: Check local referee supplies and cube growth
+        run: python3 -m unittest discover -s tests -p 'test_*arena.py'
 
       - name: Build Linux amd64 image
         run: docker build --platform linux/amd64 -t mech-royale-check .
