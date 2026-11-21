@@ -4,17 +4,19 @@ import mechfight as mf
 from economy import Economy
 from mobility import Mobility
 from navigation import Navigator
+from recovery import Recovery
 from secondary import Secondary
 
 
 class Bot:
-    name = "Borovail E07"
+    name = "Borovail E11"
 
     def __init__(self, hello: mf.Hello):
         self.navigator = Navigator.from_hello(hello)
         self.mobility = Mobility(hello)
         self.economy = Economy(hello, self.navigator)
         self.secondary = Secondary(hello)
+        self.recovery = Recovery(hello)
         self.crate_height = hello["config"]["crates"]["height"]
 
     def act(self, obs: mf.Observation) -> mf.Action:
@@ -46,6 +48,8 @@ class Bot:
         elif choice["reason"] == "none":
             # Legs keep the route while the game camera reveals new pickups.
             act["aim"] = [math.remainder(me["aim"][0] + 0.4, math.tau), 0.0]
+        if self.recovery.pause_fire(obs) and any(act.get("fire", ())):
+            act["fire"] = [False, False]
         mf.draw.point([goal[0], goal[1], z], "#40c0ff", 6)
         mf.draw.label(f"hp {me['hp']:.0f} · {len(enemies)} in sight")
         return act
