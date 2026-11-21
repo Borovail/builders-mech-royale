@@ -14,6 +14,12 @@ equal-HP ties are explicit; they are not reported as kills or zone deaths.
 
 def with_placement_audit(base_episode):
     class PlacementAuditEpisode(base_episode):
+        def command(self, actor):
+            # SquadEpisode updates its hunter set before dispatching commands.
+            if actor.id in self.hunters:
+                self._ever_active.add(actor.id)
+            return super().command(actor)
+
         def hit(self, src, dst, kind, damage):
             was_alive = dst.hp > 0
             result = super().hit(src, dst, kind, damage)
@@ -24,11 +30,14 @@ def with_placement_audit(base_episode):
                     "id": dst.id, "t": self.dead[dst.id], "cause": cause,
                     "weapon": kind, "by": src.id if src is not None else None,
                     "source_kind": src.kind if src is not None else None,
+                    "active_at_death": dst.id in getattr(self, "hunters", ()),
+                    "ever_active": dst.id in self._ever_active,
                 })
             return result
 
         def run(self, bot, trace):
             self._placement_deaths = []
+            self._ever_active = set()
             result = super().run(bot, trace)
             by_id = {death["id"]: death for death in self._placement_deaths}
             if set(by_id) != set(self.dead):
@@ -67,6 +76,10 @@ def with_placement_audit(base_episode):
                           audit_player_death_weapon=player_death["weapon"] if player_death else None,
                           audit_player_killer=player_death["by"] if player_death else None,
                           audit_deaths=list(self._placement_deaths))
+            player_kills = [d for d in self._placement_deaths
+                            if d["id"] != self.player.id and d["cause"] == "player"]
+            result["audit_player_kills_inactive"] = sum(not d["active_at_death"] for d in player_kills)
+            result["audit_player_kills_never_active"] = sum(not d["ever_active"] for d in player_kills)
             return result
 
     return PlacementAuditEpisode
