@@ -9,16 +9,20 @@ class Mobility:
         self.decision_s = match["decide_every"] / match["tick_hz"]
         self._burst_active = False
         self._threat_until = -math.inf
+        self._damage_until = -math.inf
         self._restart_after = -math.inf
 
     def boost(self, obs, move, *, jumping=False):
         me = obs["self"]
+        now = obs["t"]
+        if any(event["type"] == "damaged" and event.get("weapon") != "zone"
+               and event.get("amount", 0) > 0 for event in obs["events"]):
+            self._damage_until = now + 0.6
         # Retain E01's circle escape, including its existing airborne jet use.
         if not me["in_zone"]:
             self._burst_active = False
             return True
 
-        now = obs["t"]
         stats = me["stats"]
         drain = stats.get("boost_drain", self.defaults["boost_drain"])
         regen_delay = stats.get("energy_regen_delay", self.defaults["energy_regen_delay"])
@@ -31,10 +35,15 @@ class Mobility:
 
         maximum = me["max_energy"]
         reserve = min(maximum * 0.6, max(maximum * 0.35, drain * (1.0 + regen_delay)))
-        start_energy = min(maximum, reserve + drain * 2.0)
+        emergency = (45.0 <= now <= 180.0 and me["hp"] <= me["max_hp"] * 0.5
+                     and now <= self._damage_until)
+        if emergency:
+            # Keep one second of ground boost, even with a tiny maximum.
+            reserve = drain
+        start_energy = min(maximum, reserve + drain * (0.5 if emergency else 2.0))
         radius = stats.get("radius", self.defaults["radius"])
         goal_distance = math.dist(me["pos"][:2], obs["zone"]["next_center"])
-        if (now > self._threat_until or math.hypot(*move) <= 0.1
+        if ((now > self._threat_until and not emergency) or math.hypot(*move) <= 0.1
                 or goal_distance <= radius * 2.0 or maximum - reserve < drain * 0.75):
             self._burst_active = False
             return False
@@ -45,6 +54,7 @@ class Mobility:
         # uses the same energy reserve as the interrupted burst.
         if not me["grounded"] or jumping:
             return False
-        if not self._burst_active and now >= self._restart_after and me["energy"] >= start_energy:
+        if (not self._burst_active and (emergency or now >= self._restart_after)
+                and me["energy"] >= start_energy):
             self._burst_active = True
         return self._burst_active

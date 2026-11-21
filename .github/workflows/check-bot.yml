@@ -41,6 +41,12 @@ jobs:
       - name: Check E05 ground boost and energy
         run: python3 tests/check_mobility.py --kit "$KIT_DIR"
 
+      - name: Compare emergency ground boost against E10
+        run: |
+          previous="$(mktemp -d)"
+          git archive 9498346af033adb0e88a2b4e48e1f9142c54de21 | tar -xf - -C "$previous"
+          python3 tests/check_emergency_mobility.py --kit "$KIT_DIR" --baseline "$previous/example_bot.py"
+
       - name: Check E06 resource collection
         run: python3 tests/check_economy.py --kit "$KIT_DIR"
 
