@@ -2,18 +2,20 @@
 import math
 import mechfight as mf
 from economy import Economy
+from loot_boost import LootBoost
 from mobility import Mobility
 from navigation import Navigator
 from secondary import Secondary
 
 
 class Bot:
-    name = "Borovail E07"
+    name = "Borovail E12"
 
     def __init__(self, hello: mf.Hello):
         self.navigator = Navigator.from_hello(hello)
         self.mobility = Mobility(hello)
         self.economy = Economy(hello, self.navigator)
+        self.loot_boost = LootBoost(hello)
         self.secondary = Secondary(hello)
         self.crate_height = hello["config"]["crates"]["height"]
 
@@ -31,8 +33,10 @@ class Bot:
         yaw = math.atan2(goal[1] - y, goal[0] - x)
         direction = self.navigator.direction(me["pos"], goal, me["stats"]["radius"])
         jump = obs["tick"] % 40 == 0
+        base_boost = self.mobility.boost(obs, direction, jumping=jump)
+        loot_boost = self.loot_boost.boost(obs, choice, jumping=jump) and math.hypot(*direction) > 0
         act.update(move=list(direction), aim=[yaw, 0.0],
-                   boost=self.mobility.boost(obs, direction, jumping=jump), jump=jump)
+                   boost=base_boost or loot_boost, jump=jump)
         if enemies:
             t = enemies[0]["pos"]
             aim = [math.atan2(t[1] - y, t[0] - x), math.atan2(t[2] - z - 2.5, math.dist(t[:2], (x, y)))]
