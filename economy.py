@@ -100,7 +100,7 @@ class Economy:
         return visible
 
     @staticmethod
-    def _circle(obs, when):
+    def circle_at(obs, when):
         zone, now = obs["zone"], obs["t"]
         start = max(now, zone["shrink_start"])
         if when <= start:
@@ -116,7 +116,7 @@ class Economy:
         margin = radius + 2.0
         travel = distance * 1.25 / speed
         arrival = now + travel + work + 0.7
-        center, size = self._circle(obs, arrival)
+        center, size = self.circle_at(obs, arrival)
         if math.dist(point, center) + margin > size:
             return False
         # A target inside the next circle remains safe through this phase.
@@ -129,7 +129,7 @@ class Economy:
         for fraction in (0.0, 0.5, 1.0):
             step = min(radial, escape * fraction)
             q = tuple(a + (b - a) * step / radial for a, b in zip(point, zone["next_center"])) if radial else point
-            center, size = self._circle(obs, arrival + duration * fraction)
+            center, size = self.circle_at(obs, arrival + duration * fraction)
             if math.dist(q, center) + margin > size:
                 return False
         return True
