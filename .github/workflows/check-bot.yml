@@ -53,7 +53,7 @@ jobs:
           git archive 6ba4e8105a9de2a6f438da7761da22b4ab04ee44 | tar -xf - -C "$previous"
           python3 tests/check_supplies.py --kit "$KIT_DIR" --baseline "$previous/example_bot.py"
 
-      - name: Check local referee supplies and cube growth
+      - name: Check local referee supplies, cube growth and initial spawns
         run: python3 -m unittest discover -s tests -p 'test_*arena.py'
 
       - name: Check placement attribution for ties and timeout

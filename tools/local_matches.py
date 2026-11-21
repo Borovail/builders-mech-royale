@@ -97,7 +97,7 @@ def load_file(name, path):
 
 
 def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies, fixed_planning=False,
-                cube_size=False, audit_places=False):
+                cube_size=False, audit_places=False, legal_spawns=False):
     global _arena, _bot_class, _draw, _worker_init_s
     start = time.perf_counter()
     engine, bot_dir = Path(engine), Path(bot_dir)
@@ -112,6 +112,9 @@ def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies, fixed_pla
     package.__path__ = [str(engine / "training")]
     sys.modules["training"] = package
     squad = importlib.import_module("training.squad16")
+    if legal_spawns:
+        from spawn_arena import with_legal_spawns
+        squad.SquadEpisode = with_legal_spawns(squad.SquadEpisode)
     if supplies:
         from supply_arena import with_supply_drops
         squad.SquadEpisode = with_supply_drops(squad.SquadEpisode)
@@ -247,6 +250,8 @@ def main(argv=None):
     parser.add_argument("--cube-size", action="store_true", help="Apply the published per-cube size scaling to every mech")
     parser.add_argument("--audit-places", action="store_true",
                         help="Record how rival eliminations and end-of-match ranking contribute to placement")
+    parser.add_argument("--legal-spawns", action="store_true",
+                        help="Check the 16 initial mech cylinders against the published building geometry")
     parser.add_argument("--fixed-planning", action="store_true",
                         help="Diagnostic: advance only bot navigation's planning clock by 1 us per call")
     args = parser.parse_args(argv)
@@ -281,6 +286,9 @@ def main(argv=None):
         metadata["engine_changes"].append("uncapped cube size scaling")
     if args.audit_places:
         metadata["placement_audit_sha256"] = sha256(Path(__file__).with_name("placement_audit.py"))
+    if args.legal_spawns:
+        metadata["spawn_arena_sha256"] = sha256(Path(__file__).with_name("spawn_arena.py"))
+        metadata["engine_changes"].append("validate initial mech spawns against published prisms")
     if args.fixed_planning:
         metadata["planning_clock"] = {
             "mode": "fixed_counter", "seconds_per_perf_counter_call": 0.000001,
@@ -294,7 +302,8 @@ def main(argv=None):
         ]
     results = []
     initargs = tuple(str(p) for p in (args.engine, args.kit, args.bot_dir)) + (
-        source_hashes, args.supplies, args.fixed_planning, args.cube_size, args.audit_places)
+        source_hashes, args.supplies, args.fixed_planning, args.cube_size, args.audit_places,
+        args.legal_spawns)
     pool = ProcessPoolExecutor(max_workers=metadata["workers"],
             mp_context=multiprocessing.get_context("spawn"), initializer=worker_init, initargs=initargs)
     futures = []
