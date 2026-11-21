@@ -98,7 +98,7 @@ def load_file(name, path):
 
 def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies, fixed_planning=False,
                 cube_size=False, audit_places=False, legal_spawns=False,
-                house_every_observation=False):
+                house_every_observation=False, movement_geometry=False):
     global _arena, _bot_class, _draw, _worker_init_s
     start = time.perf_counter()
     engine, bot_dir = Path(engine), Path(bot_dir)
@@ -121,6 +121,9 @@ def worker_init(engine, kit, bot_dir, expected_bot_manifest, supplies, fixed_pla
                 return super().update_zone()
 
         squad.SquadEpisode = PerObservationHouse
+    if movement_geometry:
+        from movement_arena import with_movement_geometry
+        squad.SquadEpisode = with_movement_geometry(squad.SquadEpisode)
     if legal_spawns:
         from spawn_arena import with_legal_spawns
         squad.SquadEpisode = with_legal_spawns(squad.SquadEpisode)
@@ -263,6 +266,8 @@ def main(argv=None):
                         help="Check the 16 initial mech cylinders against the published building geometry")
     parser.add_argument("--house-every-observation", action="store_true",
                         help="Sensitivity test: update house commands at every player observation")
+    parser.add_argument("--movement-geometry", action="store_true",
+                        help="Check grounded mech steps against the published building prisms")
     parser.add_argument("--fixed-planning", action="store_true",
                         help="Diagnostic: advance only bot navigation's planning clock by 1 us per call")
     args = parser.parse_args(argv)
@@ -302,6 +307,9 @@ def main(argv=None):
         metadata["engine_changes"].append("validate initial mech spawns against published prisms")
     if args.house_every_observation:
         metadata["engine_changes"].append("update house commands at each player observation")
+    if args.movement_geometry:
+        metadata["movement_arena_sha256"] = sha256(Path(__file__).with_name("movement_arena.py"))
+        metadata["engine_changes"].append("grounded mech movement uses indexed prism checks")
     if args.fixed_planning:
         metadata["planning_clock"] = {
             "mode": "fixed_counter", "seconds_per_perf_counter_call": 0.000001,
@@ -316,7 +324,7 @@ def main(argv=None):
     results = []
     initargs = tuple(str(p) for p in (args.engine, args.kit, args.bot_dir)) + (
         source_hashes, args.supplies, args.fixed_planning, args.cube_size, args.audit_places,
-        args.legal_spawns, args.house_every_observation)
+        args.legal_spawns, args.house_every_observation, args.movement_geometry)
     pool = ProcessPoolExecutor(max_workers=metadata["workers"],
             mp_context=multiprocessing.get_context("spawn"), initializer=worker_init, initargs=initargs)
     futures = []
