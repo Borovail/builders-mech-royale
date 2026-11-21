@@ -9,7 +9,7 @@ from supply import SupplyDrops
 
 
 class Bot:
-    name = "Borovail E10"
+    name = "Borovail E15"
 
     def __init__(self, hello: mf.Hello):
         self.navigator = Navigator.from_hello(hello)
@@ -35,6 +35,8 @@ class Bot:
         yaw = math.atan2(goal[1] - y, goal[0] - x)
         direction = (0.0, 0.0) if holding else self.navigator.direction(me["pos"], goal, me["stats"]["radius"])
         jump = obs["tick"] % 40 == 0 and supply is None
+        if me["grounded"] and me["in_zone"] and any(direction):
+            jump = False
         act.update(move=list(direction), aim=[yaw, 0.0],
                    boost=not holding and self.mobility.boost(obs, direction, jumping=jump), jump=jump)
         if enemies:

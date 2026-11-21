@@ -136,7 +136,7 @@ def edge_cases(factory, hello, template, arena):
              ("fresh_weapon_damage", {"events": [{"type": "damaged", "weapon": "gun", "amount": 45, "by": 5, "bearing": 0.0}]}, True)]
     results = []
     for name, kwargs, expected in cases:
-        # A normal decision avoids E01's retained periodic jump at tick 0.
+        # A normal decision isolates each edge condition from the jump period.
         tick = hello["config"]["match"]["decide_every"]
         command = action(factory(copy.deepcopy(hello)), observation(hello, template, arena, tick, **kwargs))
         got = command.get("boost", False)
@@ -146,9 +146,10 @@ def edge_cases(factory, hello, template, arena):
         results.append({"scenario": name, "boost": got, "passed": bool(passed)})
     scheduled = action(factory(copy.deepcopy(hello)), observation(
         hello, template, arena, 0, contact=True))
-    results.append({"scenario": "inside_scheduled_jump", "boost": scheduled.get("boost", False),
+    results.append({"scenario": "inside_scheduled_walk_contact", "boost": scheduled.get("boost", False),
                     "jump": scheduled.get("jump", False),
-                    "passed": scheduled.get("jump", False) and not scheduled.get("boost", False)})
+                    "passed": not scheduled.get("jump", False) and scheduled.get("boost", False)
+                              and math.hypot(*scheduled.get("move", [0.0, 0.0])) > EPS})
     return results
 
 

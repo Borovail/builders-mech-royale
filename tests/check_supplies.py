@@ -267,6 +267,10 @@ def replay_equivalence(factory, baseline, hello):
 
 def _replay_equivalence(factory, baseline, hello):
     candidate, previous = factory(copy.deepcopy(hello)), baseline(copy.deepcopy(hello))
+    # Replay the historical boost policy independently with E15's intended
+    # jump input. Its burst state must advance on every observation: changing
+    # one scheduled jump may affect subsequent boost decisions as well.
+    expected_mobility = type(previous.mobility)(copy.deepcopy(hello))
     path = Path(hello["map"]["dir"]).parent/"check/stream.jsonl.gz"
     different, count = [], 0
     with gzip.open(path, "rt", encoding="utf-8") as stream:
@@ -277,8 +281,14 @@ def _replay_equivalence(factory, baseline, hello):
                 continue
             obs["drops"] = []
             a, b = action(candidate, copy.deepcopy(obs)), action(previous, copy.deepcopy(obs))
+            expected = copy.deepcopy(b)
+            moving_on_safe_ground = (obs["self"]["grounded"]
+                                     and obs["self"]["in_zone"] and any(b["move"]))
+            expected["jump"] = bool(b["jump"] and not moving_on_safe_ground)
+            expected["boost"] = expected_mobility.boost(
+                copy.deepcopy(obs), b["move"], jumping=expected["jump"])
             count += 1
-            if a != b:
+            if a != expected:
                 different.append(obs["tick"])
     return {"scenario": "no_drops_official_replay", "observations": count,
             "different_actions": len(different), "first_differing_ticks": different[:10],

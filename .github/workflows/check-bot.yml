@@ -41,6 +41,12 @@ jobs:
       - name: Check E05 ground boost and energy
         run: python3 tests/check_mobility.py --kit "$KIT_DIR"
 
+      - name: Check E15 grounded movement against the submitted E10
+        run: |
+          baseline="$(mktemp -d)"
+          git archive 9498346af033adb0e88a2b4e48e1f9142c54de21 | tar -xf - -C "$baseline"
+          python3 tests/check_grounded_jump.py --kit "$KIT_DIR" --baseline "$baseline/example_bot.py"
+
       - name: Check E06 resource collection
         run: python3 tests/check_economy.py --kit "$KIT_DIR"
 
