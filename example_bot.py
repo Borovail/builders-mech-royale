@@ -2,28 +2,29 @@
 import math
 import mechfight as mf
 from navigation import Navigator
+from loot import LootPolicy
 
 
 class Bot:
-    name = "Borovail E01"
+    name = "Borovail E04"
 
     def __init__(self, hello: mf.Hello):
-        self.reach = hello["config"]["loot"]["pickup_radius"]
         self.navigator = Navigator.from_hello(hello)
+        self.loot = LootPolicy(hello, self.navigator)
 
     def act(self, obs: mf.Observation) -> mf.Action:
         me = obs["self"]
         x, y, z = me["pos"]
         goal = obs["zone"]["next_center"]
+        destination, pickup = self.loot.choose(obs)
         act: mf.Action = {"tick": obs["tick"]}
         if obs["offer"]:
             act["pick"] = 0
-        near = [p for p in obs["pickups"] if math.dist(p["pos"][:2], (x, y)) < self.reach]
-        if me["weapons"][1] is None and near and near[0]["kind"] != "gun":
-            act["take"] = near[0]["id"]
+        if pickup is not None:
+            act["take"] = pickup
         enemies = sorted((m for m in obs["mechs"] if m["kind"] == "mech"), key=lambda m: math.dist(m["pos"], me["pos"]))
         yaw = math.atan2(goal[1] - y, goal[0] - x)
-        direction = self.navigator.direction(me["pos"], goal, me["stats"]["radius"])
+        direction = self.navigator.direction(me["pos"], destination, me["stats"]["radius"])
         act.update(move=list(direction), aim=[yaw, 0.0], boost=not me["in_zone"], jump=obs["tick"] % 40 == 0)
         if enemies:
             t = enemies[0]["pos"]
