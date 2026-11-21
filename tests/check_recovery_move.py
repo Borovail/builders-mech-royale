@@ -1,4 +1,4 @@
-"""Public Bot.act E18 recovery relocation checks against exact E15.
+"""Public Bot.act recovery relocation checks against exact E15.
 
 Run: python -B tests/check_recovery_move.py --kit KIT [--baseline FILE]
 Uses the official hello, terrain and prisms. The bounded ground integration
@@ -165,6 +165,19 @@ def checks(candidate, baseline, hello, template, arena):
     new, old = pair(candidate, baseline, hello, [first, expired, retry])
     record("ttl_stops_and_retry_delay_prevents_relaunch", unit(new[0]) > .99
            and new[1:] == old[1:])
+
+    before_damage = fixture(hello, template, arena, now=89.9, hp=1, damaged=False)
+    samples = [before_damage]
+    for i in range(8):
+        x = START[0] + (0.9 if i % 2 == 0 else -0.9)
+        observation = fixture(hello, template, arena, now=90 + i / 10,
+                              position=(x, START[1]), damaged=(i == 0))
+        observation["self"]["vel"] = [-6.0 if i % 2 == 0 else 6.0, 0.0, 0.0]
+        samples.append(observation)
+    new, old = pair(candidate, baseline, hello, samples)
+    record("close_oscillation_relocates_after_delay",
+           new[:7] == old[:7] and old[-1]["move"][0] > 0.99
+           and new[-2]["move"][0] < -0.99 and new[-1]["move"][0] < -0.99)
 
     # Official prism lane: the eastward 24 m leg intersects a solid building.
     # Recovery must select a different verified heading, with no navigator mock.

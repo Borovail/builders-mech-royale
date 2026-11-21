@@ -76,10 +76,11 @@ class RecoveryMove:
                 return None
             return self._waypoint
 
-        stalled = (math.hypot(*original_move) <= 0.1
+        goal_distance = math.dist(pos, fallback_goal)
+        stalled = (goal_distance <= 3.0
+                   or math.hypot(*original_move) <= 0.1
                    or math.hypot(*me["vel"][:2]) <= 3.0)
-        if (math.dist(pos, fallback_goal) > max(10.0, 3.0 * radius)
-                or not stalled):
+        if goal_distance > max(10.0, 3.0 * radius) or not stalled:
             self._stalled_since = None
             return None
         if self._stalled_since is None:
