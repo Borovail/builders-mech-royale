@@ -3,18 +3,20 @@ import math
 import mechfight as mf
 from economy import Economy
 from mobility import Mobility
+from mortar import Mortar
 from navigation import Navigator
 from secondary import Secondary
 from supply import SupplyDrops
 
 
 class Bot:
-    name = "Borovail E15"
+    name = "Borovail E27"
 
     def __init__(self, hello: mf.Hello):
         self.navigator = Navigator.from_hello(hello)
         self.mobility = Mobility(hello)
         self.economy = Economy(hello, self.navigator)
+        self.mortar = Mortar(hello, self.navigator)
         self.secondary = Secondary(hello)
         self.supplies = SupplyDrops(hello, self.navigator)
         self.crate_height = hello["config"]["crates"]["height"]
@@ -32,6 +34,7 @@ class Bot:
         if choice["pickup_id"] is not None:
             act["take"] = choice["pickup_id"]
         enemies = sorted((m for m in obs["mechs"] if m["kind"] == "mech"), key=lambda m: math.dist(m["pos"], me["pos"]))
+        mortar = self.mortar.decide(obs, enemies[0] if enemies else None)
         yaw = math.atan2(goal[1] - y, goal[0] - x)
         direction = (0.0, 0.0) if holding else self.navigator.direction(me["pos"], goal, me["stats"]["radius"])
         jump = obs["tick"] % 40 == 0 and supply is None
@@ -42,7 +45,11 @@ class Bot:
         if enemies:
             t = enemies[0]["pos"]
             aim = [math.atan2(t[1] - y, t[0] - x), math.atan2(t[2] - z - 2.5, math.dist(t[:2], (x, y)))]
-            act.update(aim=aim, fire=[True, self.secondary.trigger(obs, enemies[0])])
+            if mortar is not None:
+                aim, fire = mortar
+            else:
+                fire = [True, self.secondary.trigger(obs, enemies[0])]
+            act.update(aim=aim, fire=fire)
             mf.draw.line([x, y, z + 7], [t[0], t[1], t[2] + 4.5], "#ff5040")
         elif supply is None and choice["crate"] is not None:
             cx, cy, cz = choice["crate"]["pos"]
