@@ -43,6 +43,9 @@ jobs:
       - name: Check E06 resource collection
         run: python3 tests/check_economy.py --kit "$KIT_DIR"
 
+      - name: Check secondary slot controls
+        run: python3 -m unittest discover -s tests -p test_secondary.py
+
       - name: Build Linux amd64 image
         run: docker build --platform linux/amd64 -t mech-royale-check .
 

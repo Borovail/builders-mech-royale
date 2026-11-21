@@ -4,15 +4,17 @@ import mechfight as mf
 from economy import Economy
 from mobility import Mobility
 from navigation import Navigator
+from secondary import Secondary
 
 
 class Bot:
-    name = "Borovail E06"
+    name = "Borovail E07"
 
     def __init__(self, hello: mf.Hello):
         self.navigator = Navigator.from_hello(hello)
         self.mobility = Mobility(hello)
         self.economy = Economy(hello, self.navigator)
+        self.secondary = Secondary(hello)
         self.crate_height = hello["config"]["crates"]["height"]
 
     def act(self, obs: mf.Observation) -> mf.Action:
@@ -34,7 +36,7 @@ class Bot:
         if enemies:
             t = enemies[0]["pos"]
             aim = [math.atan2(t[1] - y, t[0] - x), math.atan2(t[2] - z - 2.5, math.dist(t[:2], (x, y)))]
-            act.update(aim=aim, fire=[True, True])
+            act.update(aim=aim, fire=[True, self.secondary.trigger(obs, enemies[0])])
             mf.draw.line([x, y, z + 7], [t[0], t[1], t[2] + 4.5], "#ff5040")
         elif choice["crate"] is not None:
             cx, cy, cz = choice["crate"]["pos"]
