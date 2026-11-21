@@ -34,6 +34,7 @@ class Economy:
         self._last_damage = -math.inf
         self._next_plan = 0.0
         self._target_limit = 0.0
+        self._next_first_cube = 0.0
 
     def _release(self, now, cooldown=0.0):
         if self._target is not None and cooldown:
@@ -269,6 +270,43 @@ class Economy:
         return {"destination": destination, "pickup_id": None, "crate": crate,
                 "upgrade_index": pick, "reason": kind}
 
+    def _first_cube_target(self, obs, visible, opponents, speed, radius, key, distance):
+        """Interrupt a long opening equipment walk for a cheap first cube."""
+        now, me = obs["t"], obs["self"]
+        if (now >= 60.0 or me["cubes"] != 0 or obs.get("offer")
+                or key[0] != "pickup" or distance <= speed * 4
+                or now < self._next_first_cube):
+            return None
+        self._next_first_cube = now + 0.5
+        pos, goal = me["pos"][:2], obs["zone"]["next_center"]
+        candidates = []
+        for other, (item, _, _) in self._memory.items():
+            if (other[0] not in ("cube", "crate") or other not in visible
+                    or other in self._blocked_until):
+                continue
+            candidate = self._candidate(other, item, obs, opponents, speed, radius)
+            if candidate is None:
+                continue
+            score, approach, work = candidate
+            point = item["pos"][:2]
+            extra = max(0.0, approach + math.dist(point, goal) - math.dist(pos, goal))
+            cost = (0.65 * approach + 0.8 * extra) / speed + work
+            if approach <= speed * 3 and cost <= 5.0:
+                candidates.append((score, other, item, approach, work))
+        candidates.sort(key=lambda row: row[0], reverse=True)
+        for row in candidates[:4]:
+            if self._accessible(row[1], row[2], me, now, radius):
+                return row
+        return None
+
+    def _pursue(self, obs, row, visible, pick, speed):
+        _, key, item, distance, work = row
+        self._target = key
+        self._started = self._progress_at = obs["t"]
+        self._best_distance = distance
+        self._target_limit = min(30.0, 1.7 * distance / speed + work + 5)
+        return self._decision(obs, key, item, visible, pick)
+
     def decide(self, obs):
         me, now = obs["self"], obs["t"]
         visible = self._refresh(obs)
@@ -315,6 +353,10 @@ class Economy:
                 if now - self._started > self._target_limit or now - self._progress_at > 2.5:
                     self._release(now, 12.0)
                 elif self._accessible(self._target, entry[0], me, now, radius):
+                    opening = self._first_cube_target(
+                        obs, visible, opponents, speed, radius, self._target, distance)
+                    if opening is not None:
+                        return self._pursue(obs, opening, visible, pick, speed)
                     return self._decision(obs, self._target, entry[0], visible, pick)
                 else:
                     self._release(now, 5.0)
@@ -331,15 +373,15 @@ class Economy:
             if candidate:
                 candidates.append((candidate[0], key, item, candidate[1], candidate[2]))
         # Geometry sampling is bounded to four candidate approaches per half
-        # second. Active targets use one cached check per second / 8 m moved.
+        # second, plus up to four for a cheap first cube during a long opening
+        # equipment walk. Active targets use a cached check per second / 8 m.
         candidates.sort(key=lambda row: row[0], reverse=True)
-        for _, key, item, distance, work in candidates[:4]:
+        for row in candidates[:4]:
+            _, key, item, distance, _ = row
             if self._accessible(key, item, me, now, radius):
-                self._target = key
-                self._started = self._progress_at = now
-                self._best_distance = distance
-                self._target_limit = min(30.0, 1.7 * distance / speed + work + 5)
-                return self._decision(obs, key, item, visible, pick)
+                opening = self._first_cube_target(
+                    obs, visible, opponents, speed, radius, key, distance)
+                return self._pursue(obs, opening if opening is not None else row, visible, pick, speed)
         if opponents:
             fallback["reason"] = "danger"
         return fallback
