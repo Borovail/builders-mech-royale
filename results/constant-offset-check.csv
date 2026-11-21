@@ -1,0 +1,10 @@
+version,source,role,matches,local_points,local_mean,tournament_mean,mean_bias_from_initial_five,corrected_mean,absolute_error
+starter,organizer_baseline,fit,48,234,4.875,1.15,3.546167,1.328833,0.178833
+e01,team_submission,fit,48,205,4.270833,1.56,3.546167,0.724667,0.835333
+e05,team_submission,fit,48,224,4.666667,1.6,3.546167,1.1205,0.4795
+e07,team_submission,fit,48,302,6.291667,1.98,3.546167,2.7455,0.7655
+e10,team_submission,fit,48,284,5.916667,2,3.546167,2.3705,0.3705
+4cb4a9ea753e8df3744a9ba8d44053068e64e535,published_author_report,preliminary,48,349,7.270833,3.6,3.546167,3.724667,0.124667
+9e59bbfd46f562dbb88d0a4377dc333ce2f8c273,published_author_report,check,48,365,7.604167,3.23,3.546167,4.058,0.828
+ce73f3e213a1c7bcc1fb65a90b4edf6e76133c13,published_author_report,check,48,438,9.125,3.65,3.546167,5.578833,1.928833
+03a8f93fb36afa5db4a08f211d1d1aa6dcbcae8e,published_author_report,check,48,459,9.5625,3.71,3.546167,6.016333,2.306333
