@@ -59,6 +59,9 @@ jobs:
       - name: Check placement attribution for ties and timeout
         run: python3 -m unittest discover -s tests -p test_placement_audit.py
 
+      - name: Check score reporting against historical calibration
+        run: python3 -m unittest discover -s tests -p test_score_calibration.py
+
       - name: Build Linux amd64 image
         run: docker build --platform linux/amd64 -t mech-royale-check .
 
