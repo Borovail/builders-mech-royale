@@ -1,0 +1,51 @@
+name: Check bot on Linux
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-bot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Verify runner architecture
+        run: test "$(uname -m)" = x86_64
+
+      - name: Download and verify official kit
+        run: |
+          CHECK_KIT_DIR="$(mktemp -d)"
+          curl --fail --location --retry 3 --connect-timeout 20 --max-time 120 \
+            https://www.joinbuilders.org/buildathon/tracks/builders/files/mechfight-kit.tar.gz \
+            --output "$CHECK_KIT_DIR/mechfight-kit.tar.gz"
+          printf '1758fe9125e193b268c6c1cffbf2c0ae96377214ab06d117412571c1523065ba  %s\n' \
+            "$CHECK_KIT_DIR/mechfight-kit.tar.gz" | sha256sum --check -
+          tar -xzf "$CHECK_KIT_DIR/mechfight-kit.tar.gz" -C "$CHECK_KIT_DIR"
+          echo "KIT_DIR=$CHECK_KIT_DIR/mechfight-kit" >> "$GITHUB_ENV"
+
+      - name: Check E01 routes
+        run: python3 tests/check_routes.py --kit "$KIT_DIR"
+
+      - name: Build Linux amd64 image
+        run: docker build --platform linux/amd64 -t mech-royale-check .
+
+      - name: Check container protocol three times
+        run: |
+          for attempt in 1 2 3; do
+            echo "Container conformance pass $attempt/3"
+            python3 "$KIT_DIR/check/check.py" --map-dir /arena -- \
+              docker run --platform linux/amd64 --rm -i --network none --cpus 1 \
+              --memory 512m --read-only --tmpfs /tmp:rw,size=64m --user 65534:65534 \
+              -v "$KIT_DIR/arena:/arena:ro" mech-royale-check
+          done

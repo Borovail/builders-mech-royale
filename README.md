@@ -1,6 +1,8 @@
 # Builders — Mech Royale
 
-За исходную версию для экспериментов взяли официальный бот `example_bot.py` с обёрткой `mechfight.py` из каталога `python/` стартового набора. В `Dockerfile` закреплён digest базового образа `python:3.13-slim`. Для запуска нужны только эти два файла и стандартная библиотека Python.
+Бот на Python идёт к следующему безопасному кругу. Для наземного маршрута он читает геометрию зданий и рельеф из `/arena`, проверяет свободное место с учётом радиуса меха и выбирает направление обхода. Игровая точка входа — `example_bot.py`. Корневой `Dockerfile` использует закреплённый образ `python:3.13-slim` и стандартную библиотеку Python.
+
+Коммит `2411871` хранит исходный Python-пример организатора. Из него взяты обёртка протокола `mechfight.py` и базовая логика в `example_bot.py`. Собственный алгоритм движения находится в `navigation.py`. Независимая проверка сравнивает поведение двух версий на геометрии официальной карты.
 
 Комплект получен 21 ноября 2026 года. Ниже указана контрольная сумма SHA256 скачанного архива. [Официальный стартовый набор Builders](https://www.joinbuilders.org/buildathon/tracks/builders/files/mechfight-kit.tar.gz)
 
@@ -31,11 +33,12 @@ tar -xzf "$CHECK_KIT_DIR/mechfight-kit.tar.gz" -C "$CHECK_KIT_DIR"
 KIT_DIR="$CHECK_KIT_DIR/mechfight-kit"
 ```
 
-## Проверить исходного бота
+## Проверить бота
 
-Для локальной проверки запустите точку входа проекта на записи организатора.
+Для проверки движения прогоните три сценария — путь через здание, старт вплотную к стене и свободный участок. Затем запустите точку входа проекта на записи организатора и проверьте формат и скорость ответов.
 
 ```sh
+python3 tests/check_routes.py --kit "$KIT_DIR"
 python3 "$KIT_DIR/check/check.py" --map-dir "$KIT_DIR/arena" \
   -- python3 -u ./example_bot.py
 ```
@@ -43,11 +46,13 @@ python3 "$KIT_DIR/check/check.py" --map-dir "$KIT_DIR/arena" \
 Чтобы проверить образ в условиях организатора, соберите его для `linux/amd64` и передайте в ту же программу проверки.
 
 ```sh
-docker build --platform linux/amd64 -t mech-royale-baseline .
+docker build --platform linux/amd64 -t mech-royale .
 python3 "$KIT_DIR/check/check.py" --map-dir /arena -- \
   docker run --platform linux/amd64 --rm -i --network none --cpus 1 \
   --memory 512m --read-only --tmpfs /tmp:rw,size=64m --user 65534:65534 \
-  -v "$KIT_DIR/arena:/arena:ro" mech-royale-baseline
+  -v "$KIT_DIR/arena:/arena:ro" mech-royale
 ```
 
 Запускайте проверку контейнера Linux-версией Python, чтобы `--map-dir /arena` передал боту путь к смонтированной карте. `check.py` воспроизводит запись и проверяет протокол, время ответа и завершение. Игровой результат появляется после 48 практических матчей у организатора.
+
+На каждый push GitHub Actions собирает образ на Linux x86_64, проверяет маршруты и трижды запускает контейнерную проверку организатора. [История проверок](https://github.com/Borovail/builders-mech-royale/actions/workflows/check-bot.yml)
